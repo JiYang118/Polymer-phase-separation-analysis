@@ -8,7 +8,7 @@ our example datafile name: Generic_blend_polymer.data
 
 our test file in LAMMPS environment : test.in 
 
-# python code to calculate structure factor peak intensity and a contact-based mixing metric
+# Python code to calculate structure factor peak intensity and a contact-based mixing metric
 
 structure factor calculation.py 
 
