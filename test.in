@@ -1,0 +1,115 @@
+units       lj
+boundary    p p p
+atom_style  molecular
+
+read_data   PCL_CS_blend_with_dihedral_structure2.data
+
+
+group PCL type 1
+group CS  type 2
+
+bond_style  fene
+bond_coeff  1 30.0 1.5 1.0 1.0      # 1 PCL bond
+bond_coeff  2 30.0 1.5 1.0 1.0      # 2 CS bond 
+
+
+angle_style cosine/squared
+angle_coeff 1 12.5 109.5           # 1 PCL angle
+angle_coeff 2 12.5 109.5           # 2 CS angle
+
+
+variable kphi1 equal 0.0
+variable keff1 equal 0.7015834*v_kphi1
+variable K1    equal 4.625*v_keff1
+variable K2    equal -2.06*v_keff1
+variable K3    equal 5.475*v_keff1
+
+variable kphi2 equal 1.0
+variable keff2 equal 0.7015834*v_kphi2
+variable K11   equal 4.625*v_keff2
+variable K22   equal -2.06*v_keff2
+variable K33   equal 5.475*v_keff2
+
+
+dihedral_style opls
+dihedral_coeff 1 0.0 0.0 0.0 0.0   # OFF during overlap removal
+dihedral_coeff 2 0.0 0.0 0.0 0.0   # OFF during overlap removal
+
+neighbor     0.6 bin
+neigh_modify every 1 delay 0 check yes
+comm_modify  cutoff 6.0
+
+pair_style soft 1.0
+pair_coeff * * 10.0
+
+special_bonds fene
+
+thermo_style custom step temp etotal pe epair ebond eangle edihed pxx pyy pzz lx ly lz density spcpu
+thermo 1000
+timestep 0.001
+
+minimize 1e-6 1e-8 50000 100000
+
+velocity all create 1.0 4928459 mom yes rot no dist gaussian
+fix mom all momentum 100 linear 1 1 1
+
+# ---- SOFT stage: short limiter, then normal dynamics ----
+fix 1 all nve/limit 0.01
+fix 2 all langevin 1.0 1.0 0.1 1243 zero yes
+run 20000
+unfix 1
+
+fix 1 all nve
+run 80000
+unfix 1
+unfix 2
+
+# ---- Switch to WCA ----
+pair_style lj/cut 1.12246
+pair_modify shift yes
+pair_coeff 1 1 1.0 1.0 1.12246
+pair_coeff 2 2 1.0 1.0 1.12246
+pair_coeff 1 2 1.0 1.0 1.12246
+
+
+# ---- WCA bridge (small dt + limiter) ----
+timestep 0.001
+fix int all nve/limit 0.01
+fix th  all langevin 1.2 1.2 0.1 1243 zero yes
+run 50000
+unfix int
+unfix th
+
+# ---- Turn torsion ON after stable ----
+dihedral_coeff 1 ${K1}  ${K2}  ${K3}  0.0
+dihedral_coeff 2 ${K11} ${K22} ${K33} 0.0
+
+
+# ---- Production at T=1.2 ----
+timestep 0.001
+thermo 50000
+
+dump 2 all dcd 10000 PCL_CS_cool_r12.dcd
+fix 1 all nvt temp 1.2 1.2 0.1
+run 1000000
+unfix 1
+undump 2
+write_restart PCL_CS_temp12.restart
+
+# ---- Cool to 0.6 ----
+dump 2 all dcd 30000 PCL_CS_cool_r06.dcd
+fix 1 all nvt temp 0.6 0.6 0.1
+run 6000000
+unfix 1
+undump 2
+write_restart PCL_CS_temp06.restart
+
+# ---- Cool to 0.2 ----
+dump 2 all dcd 20000 PCL_CS_cool_r02.dcd
+fix 1 all nvt temp 0.2 0.2 0.1
+run 4000000
+unfix 1
+undump 2
+write_restart PCL_CS_temp02.restart
+
+unfix mom
